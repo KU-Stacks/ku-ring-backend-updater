@@ -34,6 +34,11 @@ jobs:
           git add .
           git commit -m "Build Ready"
 
+      - name: Install JDK 11
+        uses: actions/setup-java@v1
+        with:
+          java-version: '11'
+
       - name: Deploy to Heroku
         # You may pin to the exact commit or the version.
         # uses: AkhileshNS/heroku-deploy@79ef2ae4ff9b897010907016b268fd0f88561820
