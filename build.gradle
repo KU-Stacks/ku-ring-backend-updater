@@ -41,3 +41,14 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+bootJar {
+	enabled = true
+}
+
+jar {
+	enabled = false
+	manifest {
+		attributes 'Main-Class': 'com.kustacks.kuring.worker.WorkerApplication'
+	}
+}
