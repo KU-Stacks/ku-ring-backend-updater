@@ -1,0 +1,1 @@
+worker: java $JAVA_OPTS -Xms250m -Xmx300m -Dspring.profiles.active=$DEPLOY_ENV -Dserver.port=$PORT -jar build/libs/*.jar
