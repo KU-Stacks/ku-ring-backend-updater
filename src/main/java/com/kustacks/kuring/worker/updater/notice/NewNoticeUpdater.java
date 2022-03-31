@@ -15,26 +15,16 @@ import com.kustacks.kuring.worker.updater.notice.dto.response.CommonNoticeFormat
 import com.kustacks.kuring.worker.updater.util.converter.DTOConverter;
 import com.kustacks.kuring.worker.updater.util.converter.DateConverter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @Component
 public class NewNoticeUpdater {
-
-    @Value("${notice.normal-base-url}")
-    private String normalBaseUrl;
-
-    @Value("${notice.library-base-url}")
-    private String libraryBaseUrl;
 
     private final Map<CategoryName, NoticeAPIClient<CommonNoticeFormatDTO, CategoryName>> noticeAPIClientMap;
     private final Map<CategoryName, DeptInfo> categoryNameDeptInfoMap;
@@ -101,6 +91,15 @@ public class NewNoticeUpdater {
         if(!CategoryName.LIBRARY.equals(categoryName)) {
             convertPostedDateToyyyyMMdd(commonNoticeFormatDTOList, categoryName);
         }
+
+        // noticeAPIClient 혹은 scraper에서 새로운 공지를 감지할 때, 가장 최신에 올라온 공지를 list에 순차적으로 담는다.
+        // 이 때문에 만약 같은 시간대에 감지된 두 공지가 있다면, 보다 최신 공지가 리스트의 앞 인덱스에 위치하게 되고, 이를 그대로 DB에 적용한다면
+        // 보다 최신인 공지가 DB에 먼저 삽입되어, kuring API 서버에서 이를 덜 신선한 공지로 판단하게 된다.
+        // 이에 commonNoticeFormatDTOList를 reverse하여 공지의 신선도 순서를 유지한다.
+        Collections.reverse(commonNoticeFormatDTOList);
+//        for (CommonNoticeFormatDTO commonNoticeFormatDTO : commonNoticeFormatDTOList) {
+//            log.info("{} {} {} {}", commonNoticeFormatDTO.getArticleId(), commonNoticeFormatDTO.getPostedDate(), commonNoticeFormatDTO.getSubject(), commonNoticeFormatDTO.getFullUrl());
+//        }
 
         // 새 공지로 인식된 데이터들을 NewNoticeMQMessageDTO형태로 변환
         // 그 과정에서 도서관 카테고리의 postedDate를 yyyyMMdd로 변경한다.
