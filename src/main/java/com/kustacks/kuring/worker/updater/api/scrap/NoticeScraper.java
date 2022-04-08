@@ -34,13 +34,13 @@ public class NoticeScraper {
         List<CommonNoticeFormatDTO> noticeDTOList = new LinkedList<>();
 
         long start = System.currentTimeMillis();
-        log.info("{} HTML 요청", deptInfo.getDeptName());
+        log.info("[{}] HTML 요청", deptInfo.getDeptName());
         reqResults = deptInfoNoticeAPIClientMap.get(deptInfo).request(deptInfo, isFindingNew);
-        log.info("{} HTML 수신", deptInfo.getDeptName());
+        log.info("[{}] HTML 수신", deptInfo.getDeptName());
         long end = System.currentTimeMillis();
-        log.info("소요된 초 = {}", (end - start) / 1000.0);
+        log.info("[{}] 소요된 초 = {}", deptInfo.getDeptName(), (end - start) / 1000.0);
 
-        log.info("{} HTML 파싱 시작", deptInfo.getDeptName());
+        log.info("[{}] HTML 파싱 시작", deptInfo.getDeptName());
         int noticeSize = 0;
         for (ScrapingRequestResultDTO reqResult : reqResults) {
             Document document = reqResult.getDocument();
@@ -61,8 +61,8 @@ public class NoticeScraper {
 
             noticeSize += parseResult.size();
         }
-        log.info("{} HTML 파싱 완료", deptInfo.getDeptName());
-        log.info("공지 개수 = {}", noticeSize);
+        log.info("[{}] HTML 파싱 완료", deptInfo.getDeptName());
+        log.info("[{}] 공지 개수 = {}", deptInfo.getDeptName(), noticeSize);
 
         if(noticeDTOList.size() == 0) {
             throw new InternalLogicException(ErrorCode.NOTICE_SCRAPER_CANNOT_SCRAP);
