@@ -161,8 +161,7 @@ public class MappedBeanConfig {
                         deptInfo instanceof ElectiveEducationCenterDept
                 ) {
                     map.put(deptInfo, legacyPageNoticeHTMLParser);
-                } else if(deptInfo instanceof MediaCommunicationDept ||
-                        deptInfo instanceof AdvancedIndustrialFusionDept ||
+                } else if(deptInfo instanceof AdvancedIndustrialFusionDept ||
                         deptInfo instanceof EconomicsDept
                 ) {
                     map.put(deptInfo, recentPageNoticeHTMLParser2);
