@@ -180,7 +180,6 @@ public class NewNoticeUpdater {
                 }
 
                 Date noticeDate = dateFormat.parse(postedDate);
-                log.info("{} -> {}", notice.getPostedDate(), noticeDate.toString());
                 return noticeDate.after(standardDate);
             } catch (ParseException e) {
                 log.info("[{}] 잘못된 날짜 형식", categoryName.getKorName());
