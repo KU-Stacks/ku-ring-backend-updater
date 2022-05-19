@@ -19,8 +19,12 @@ import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -92,6 +96,13 @@ public class NewNoticeUpdater {
             convertPostedDateToyyyyMMdd(commonNoticeFormatDTOList, categoryName);
         }
 
+        // 현재 년월일로부터 1년 6개월 이내의 공지들만 남기기
+        try {
+            commonNoticeFormatDTOList = filterNoticesByDate(commonNoticeFormatDTOList);
+        } catch (ParseException e) {
+            throw new InternalLogicException(ErrorCode.CANNOT_CONVERT_DATE);
+        }
+
         // noticeAPIClient 혹은 scraper에서 새로운 공지를 감지할 때, 가장 최신에 올라온 공지를 list에 순차적으로 담는다.
         // 이 때문에 만약 같은 시간대에 감지된 두 공지가 있다면, 보다 최신 공지가 리스트의 앞 인덱스에 위치하게 되고, 이를 그대로 DB에 적용한다면
         // 보다 최신인 공지가 DB에 먼저 삽입되어, kuring API 서버에서 이를 덜 신선한 공지로 판단하게 된다.
@@ -149,6 +160,28 @@ public class NewNoticeUpdater {
                 log.info("카테고리 = {}", categoryName.getKorName());
             }
         }
+    }
+
+    private List<CommonNoticeFormatDTO> filterNoticesByDate(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList) throws ParseException {
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(new Date());
+        DateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+
+        cal.add(Calendar.YEAR, -1);
+        cal.add(Calendar.MONTH, -6);
+
+        Date standardDate = dateFormat.parse(dateFormat.format(cal.getTime()));
+
+        return commonNoticeFormatDTOList.stream().filter((notice) -> {
+            try {
+                Date noticeDate = dateFormat.parse(notice.getPostedDate());
+                return noticeDate.after(standardDate);
+            } catch (ParseException e) {
+                log.info("잘못된 날짜 형식");
+                log.info("{} {}", notice.getPostedDate(), notice.getSubject());
+                return false;
+            }
+        }).collect(Collectors.toList());
     }
 
     // articleId를 이용해 새로운 공지인지 아닌지 판별한다.
