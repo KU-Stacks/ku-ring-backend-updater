@@ -89,21 +89,10 @@ public class AllNoticeUpdater {
         }
 
         // 현재 년월일로부터 1년 6개월 이내의 공지들만 남기기
-        // kuis 공지들은 학교측에서 관리를 해주고 있으므로, major 공지만 이 작업 수행
-        if(!CategoryName.BACHELOR.equals(categoryName) &&
-                !CategoryName.SCHOLARSHIP.equals(categoryName) &&
-                !CategoryName.EMPLOYMENT.equals(categoryName) &&
-                !CategoryName.NATIONAL.equals(categoryName) &&
-                !CategoryName.STUDENT.equals(categoryName) &&
-                !CategoryName.INDUSTRY_UNIV.equals(categoryName) &&
-                !CategoryName.NORMAL.equals(categoryName) &&
-                !CategoryName.LIBRARY.equals(categoryName)
-        ) {
-            try {
-                commonNoticeFormatDTOList = filterNoticesByDate(commonNoticeFormatDTOList);
-            } catch (ParseException e) {
-                throw new InternalLogicException(ErrorCode.CANNOT_CONVERT_DATE);
-            }
+        try {
+            commonNoticeFormatDTOList = filterNoticesByDate(commonNoticeFormatDTOList);
+        } catch (ParseException e) {
+            throw new InternalLogicException(ErrorCode.CANNOT_CONVERT_DATE);
         }
 
         compareAndUpdateDB(commonNoticeFormatDTOList, categoryName);
