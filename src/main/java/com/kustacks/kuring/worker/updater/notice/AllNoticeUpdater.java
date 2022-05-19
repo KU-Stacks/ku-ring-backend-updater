@@ -32,6 +32,7 @@ public class AllNoticeUpdater {
     private final Map<CategoryName, DeptInfo> categoryNameDeptInfoMap;
     private final NoticeScraper scraper;
     private final DateConverter<String, String> yyyymmddConverter;
+    private final DateConverter<String, String> ymdhmsToYmdConverter;
     private final NoticeRepository noticeRepository;
     private final Map<String, Category> categoryMap;
 
@@ -39,6 +40,7 @@ public class AllNoticeUpdater {
                             Map<CategoryName, DeptInfo> categoryNameDeptInfoMap,
                             NoticeScraper noticeScraper,
                             DateConverter<String, String> yyyymmddConverter,
+                            DateConverter<String, String> ymdhmsToYmdConverter,
                             NoticeRepository noticeRepository,
                             Map<String, Category> categoryMap
     ) {
@@ -47,6 +49,7 @@ public class AllNoticeUpdater {
         this.categoryNameDeptInfoMap = categoryNameDeptInfoMap;
         this.scraper = noticeScraper;
         this.yyyymmddConverter = yyyymmddConverter;
+        this.ymdhmsToYmdConverter = ymdhmsToYmdConverter;
         this.noticeRepository = noticeRepository;
         this.categoryMap = categoryMap;
     }
@@ -90,7 +93,7 @@ public class AllNoticeUpdater {
 
         // 현재 년월일로부터 1년 6개월 이내의 공지들만 남기기
         try {
-            commonNoticeFormatDTOList = filterNoticesByDate(commonNoticeFormatDTOList);
+            commonNoticeFormatDTOList = filterNoticesByDate(commonNoticeFormatDTOList, categoryName);
         } catch (ParseException e) {
             throw new InternalLogicException(ErrorCode.CANNOT_CONVERT_DATE);
         }
@@ -121,7 +124,7 @@ public class AllNoticeUpdater {
         }
     }
 
-    private List<CommonNoticeFormatDTO> filterNoticesByDate(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList) throws ParseException {
+    private List<CommonNoticeFormatDTO> filterNoticesByDate(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList, CategoryName categoryName) throws ParseException {
         Calendar cal = Calendar.getInstance();
         cal.setTime(new Date());
         DateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
@@ -133,11 +136,17 @@ public class AllNoticeUpdater {
 
         return commonNoticeFormatDTOList.stream().filter((notice) -> {
             try {
-                Date noticeDate = dateFormat.parse(notice.getPostedDate());
+                String postedDate = notice.getPostedDate();
+                if(CategoryName.LIBRARY.equals(categoryName)) {
+                    postedDate = ymdhmsToYmdConverter.convert(postedDate);
+                }
+
+                Date noticeDate = dateFormat.parse(postedDate);
+                log.info("{} -> {}", notice.getPostedDate(), noticeDate.toString());
                 return noticeDate.after(standardDate);
             } catch (ParseException e) {
-                log.info("잘못된 날짜 형식");
-                log.info("{} {}", notice.getPostedDate(), notice.getSubject());
+                log.info("[{}] 잘못된 날짜 형식", categoryName.getKorName());
+                log.info("[{}] {} {}", categoryName.getKorName(), notice.getPostedDate(), notice.getSubject());
                 return false;
             }
         }).collect(Collectors.toList());
@@ -174,6 +183,18 @@ public class AllNoticeUpdater {
                     dbNotice.setFullUrl(notice.getFullUrl());
                     modifiedNotices.add(dbNotice);
                 }
+            }
+            // TODO: for local 작업
+            else {
+                modifiedNotices.add(Notice.builder()
+                                .articleId(notice.getArticleId())
+                                .postedDate(notice.getPostedDate())
+                                .updatedDate(notice.getUpdatedDate())
+                                .subject(notice.getSubject())
+                                .baseUrl(notice.getBaseUrl())
+                                .fullUrl(notice.getFullUrl())
+                                .category(categoryEntity)
+                                .build());
             }
         }
 

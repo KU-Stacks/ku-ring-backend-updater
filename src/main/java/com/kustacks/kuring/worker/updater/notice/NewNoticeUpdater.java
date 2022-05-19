@@ -35,6 +35,7 @@ public class NewNoticeUpdater {
     private final NoticeScraper scraper;
     private final DTOConverter<NewNoticeMQMessageDTO, Notice> noticeEntityToNewNoticeMQMessageDTOConverter;
     private final DTOConverter<Notice, CommonNoticeFormatDTO> commonNoticeFormatDTOToNoticeEntityConverter;
+    private final DateConverter<String, String> yyyymmddConverter;
     private final DateConverter<String, String> ymdhmsToYmdConverter;
     private final NoticeRepository noticeRepository;
     private final MQNotifierProducer<NewNoticeMQMessageDTO> mqNotifierProducer;
@@ -45,6 +46,7 @@ public class NewNoticeUpdater {
                             NoticeScraper noticeScraper,
                             DTOConverter<NewNoticeMQMessageDTO, Notice> noticeEntityToNewNoticeMQMessageDTOConverter,
                             DTOConverter<Notice, CommonNoticeFormatDTO> commonNoticeFormatDTOToNoticeEntityConverter,
+                            DateConverter<String, String> yyyymmddConverter,
                             DateConverter<String, String> ymdhmsToYmdConverter,
 
                             NoticeRepository noticeRepository,
@@ -58,6 +60,7 @@ public class NewNoticeUpdater {
         this.scraper = noticeScraper;
         this.noticeEntityToNewNoticeMQMessageDTOConverter = noticeEntityToNewNoticeMQMessageDTOConverter;
         this.commonNoticeFormatDTOToNoticeEntityConverter = commonNoticeFormatDTOToNoticeEntityConverter;
+        this.yyyymmddConverter = yyyymmddConverter;
         this.ymdhmsToYmdConverter = ymdhmsToYmdConverter;
 
         this.noticeRepository = noticeRepository;
@@ -98,7 +101,7 @@ public class NewNoticeUpdater {
 
         // 현재 년월일로부터 1년 6개월 이내의 공지들만 남기기
         try {
-            commonNoticeFormatDTOList = filterNoticesByDate(commonNoticeFormatDTOList);
+            commonNoticeFormatDTOList = filterNoticesByDate(commonNoticeFormatDTOList, categoryName);
         } catch (ParseException e) {
             throw new InternalLogicException(ErrorCode.CANNOT_CONVERT_DATE);
         }
@@ -108,9 +111,6 @@ public class NewNoticeUpdater {
         // 보다 최신인 공지가 DB에 먼저 삽입되어, kuring API 서버에서 이를 덜 신선한 공지로 판단하게 된다.
         // 이에 commonNoticeFormatDTOList를 reverse하여 공지의 신선도 순서를 유지한다.
         Collections.reverse(commonNoticeFormatDTOList);
-//        for (CommonNoticeFormatDTO commonNoticeFormatDTO : commonNoticeFormatDTOList) {
-//            log.info("{} {} {} {}", commonNoticeFormatDTO.getArticleId(), commonNoticeFormatDTO.getPostedDate(), commonNoticeFormatDTO.getSubject(), commonNoticeFormatDTO.getFullUrl());
-//        }
 
         // 새 공지로 인식된 데이터들을 NewNoticeMQMessageDTO형태로 변환
         // 그 과정에서 도서관 카테고리의 postedDate를 yyyyMMdd로 변경한다.
@@ -150,7 +150,7 @@ public class NewNoticeUpdater {
 
         for (CommonNoticeFormatDTO notice : commonNoticeFormatDTOList) {
             try {
-                String converted = ymdhmsToYmdConverter.convert(notice.getPostedDate());
+                String converted = yyyymmddConverter.convert(notice.getPostedDate());
                 notice.setPostedDate(converted);
             } catch(Exception e) {
                 log.info("에러 발생 공지 내용");
@@ -162,7 +162,7 @@ public class NewNoticeUpdater {
         }
     }
 
-    private List<CommonNoticeFormatDTO> filterNoticesByDate(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList) throws ParseException {
+    private List<CommonNoticeFormatDTO> filterNoticesByDate(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList, CategoryName categoryName) throws ParseException {
         Calendar cal = Calendar.getInstance();
         cal.setTime(new Date());
         DateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
@@ -174,11 +174,17 @@ public class NewNoticeUpdater {
 
         return commonNoticeFormatDTOList.stream().filter((notice) -> {
             try {
-                Date noticeDate = dateFormat.parse(notice.getPostedDate());
+                String postedDate = notice.getPostedDate();
+                if(CategoryName.LIBRARY.equals(categoryName)) {
+                    postedDate = ymdhmsToYmdConverter.convert(postedDate);
+                }
+
+                Date noticeDate = dateFormat.parse(postedDate);
+                log.info("{} -> {}", notice.getPostedDate(), noticeDate.toString());
                 return noticeDate.after(standardDate);
             } catch (ParseException e) {
-                log.info("잘못된 날짜 형식");
-                log.info("{} {}", notice.getPostedDate(), notice.getSubject());
+                log.info("[{}] 잘못된 날짜 형식", categoryName.getKorName());
+                log.info("[{}] {} {}", categoryName.getKorName(), notice.getPostedDate(), notice.getSubject());
                 return false;
             }
         }).collect(Collectors.toList());
