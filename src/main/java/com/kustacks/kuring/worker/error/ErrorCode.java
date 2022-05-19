@@ -45,6 +45,8 @@ public enum ErrorCode {
 
     DB_SQLEXCEPTION("DB 작업에 문제가 발생했습니다."),
 
+    CANNOT_CONVERT_DATE("날짜 형식 변환에 문제가 발생했습니다."),
+
     AD_UNAUTHENTICATED("관리자가 아닙니다."),
 
     UNKNOWN("알 수 없는 오류입니다.");

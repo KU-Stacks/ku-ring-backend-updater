@@ -2,6 +2,8 @@ package com.kustacks.kuring.worker.updater.notice;
 
 import com.kustacks.kuring.worker.error.ErrorCode;
 import com.kustacks.kuring.worker.error.InternalLogicException;
+import com.kustacks.kuring.worker.notifier.firebase.NotifierFirebaseClient;
+import com.kustacks.kuring.worker.notifier.firebase.dto.NoticeFBMessageDTO;
 import com.kustacks.kuring.worker.persistence.category.Category;
 import com.kustacks.kuring.worker.persistence.category.CategoryRepository;
 import com.kustacks.kuring.worker.persistence.notice.Notice;
@@ -9,16 +11,18 @@ import com.kustacks.kuring.worker.persistence.notice.NoticeRepository;
 import com.kustacks.kuring.worker.updater.CategoryName;
 import com.kustacks.kuring.worker.updater.api.notice.NoticeAPIClient;
 import com.kustacks.kuring.worker.updater.api.scrap.NoticeScraper;
-import com.kustacks.kuring.worker.notifier.firebase.dto.NoticeFBMessageDTO;
 import com.kustacks.kuring.worker.updater.deptinfo.DeptInfo;
-import com.kustacks.kuring.worker.notifier.firebase.NotifierFirebaseClient;
 import com.kustacks.kuring.worker.updater.notice.dto.response.CommonNoticeFormatDTO;
 import com.kustacks.kuring.worker.updater.util.converter.DTOConverter;
 import com.kustacks.kuring.worker.updater.util.converter.DateConverter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -27,38 +31,23 @@ public class AllNoticeUpdater {
     private final Map<CategoryName, NoticeAPIClient<CommonNoticeFormatDTO, CategoryName>> noticeAPIClientMap;
     private final Map<CategoryName, DeptInfo> categoryNameDeptInfoMap;
     private final NoticeScraper scraper;
-    private final DTOConverter<NoticeFBMessageDTO, Notice> noticeMessageDTOToNoticeConverter;
     private final DateConverter<String, String> yyyymmddConverter;
-    private final NotifierFirebaseClient notifierFirebaseClient;
     private final NoticeRepository noticeRepository;
-    private final CategoryRepository categoryRepository;
-    private Map<String, Category> categoryMap;
+    private final Map<String, Category> categoryMap;
 
-    public AllNoticeUpdater(NotifierFirebaseClient notifierFirebaseClient,
-
-                            Map<CategoryName, NoticeAPIClient<CommonNoticeFormatDTO, CategoryName>> noticeAPIClientMap,
+    public AllNoticeUpdater(Map<CategoryName, NoticeAPIClient<CommonNoticeFormatDTO, CategoryName>> noticeAPIClientMap,
                             Map<CategoryName, DeptInfo> categoryNameDeptInfoMap,
                             NoticeScraper noticeScraper,
-                            DTOConverter<NoticeFBMessageDTO, Notice> noticeEntityToNoticeMessageDTOConverter,
                             DateConverter<String, String> yyyymmddConverter,
-
                             NoticeRepository noticeRepository,
-                            CategoryRepository categoryRepository,
-
                             Map<String, Category> categoryMap
     ) {
 
         this.noticeAPIClientMap = noticeAPIClientMap;
         this.categoryNameDeptInfoMap = categoryNameDeptInfoMap;
         this.scraper = noticeScraper;
-        this.noticeMessageDTOToNoticeConverter = noticeEntityToNoticeMessageDTOConverter;
         this.yyyymmddConverter = yyyymmddConverter;
-
-        this.notifierFirebaseClient = notifierFirebaseClient;
-
         this.noticeRepository = noticeRepository;
-        this.categoryRepository = categoryRepository;
-
         this.categoryMap = categoryMap;
     }
 
@@ -94,10 +83,29 @@ public class AllNoticeUpdater {
             return; // TODO: 더 나은 처리 필요
         }
 
+        // 도서관 카테고리를 제외한 나머지 공지들의 날짜 포맷을 yyyymmdd로 통일
         if(!CategoryName.LIBRARY.equals(categoryName)) {
             convertPostedDateToyyyyMMdd(commonNoticeFormatDTOList, categoryName);
         }
-        
+
+        // 현재 년월일로부터 1년 6개월 이내의 공지들만 남기기
+        // kuis 공지들은 학교측에서 관리를 해주고 있으므로, major 공지만 이 작업 수행
+        if(!CategoryName.BACHELOR.equals(categoryName) &&
+                !CategoryName.SCHOLARSHIP.equals(categoryName) &&
+                !CategoryName.EMPLOYMENT.equals(categoryName) &&
+                !CategoryName.NATIONAL.equals(categoryName) &&
+                !CategoryName.STUDENT.equals(categoryName) &&
+                !CategoryName.INDUSTRY_UNIV.equals(categoryName) &&
+                !CategoryName.NORMAL.equals(categoryName) &&
+                !CategoryName.LIBRARY.equals(categoryName)
+        ) {
+            try {
+                commonNoticeFormatDTOList = filterNoticesByDate(commonNoticeFormatDTOList);
+            } catch (ParseException e) {
+                throw new InternalLogicException(ErrorCode.CANNOT_CONVERT_DATE);
+            }
+        }
+
         compareAndUpdateDB(commonNoticeFormatDTOList, categoryName);
 
         log.info("******** {} 학과 공지 업데이트 종료 ********", categoryName.getKorName());
@@ -122,6 +130,28 @@ public class AllNoticeUpdater {
                 log.info("카테고리 = {}", categoryName.getKorName());
             }
         }
+    }
+
+    private List<CommonNoticeFormatDTO> filterNoticesByDate(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList) throws ParseException {
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(new Date());
+        DateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+
+        cal.add(Calendar.YEAR, -1);
+        cal.add(Calendar.MONTH, -6);
+
+        Date standardDate = dateFormat.parse(dateFormat.format(cal.getTime()));
+
+        return commonNoticeFormatDTOList.stream().filter((notice) -> {
+            try {
+                Date noticeDate = dateFormat.parse(notice.getPostedDate());
+                return noticeDate.after(standardDate);
+            } catch (ParseException e) {
+                log.info("잘못된 날짜 형식");
+                log.info("{} {}", notice.getPostedDate(), notice.getSubject());
+                return false;
+            }
+        }).collect(Collectors.toList());
     }
 
     private void compareAndUpdateDB(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList, CategoryName categoryName) {
