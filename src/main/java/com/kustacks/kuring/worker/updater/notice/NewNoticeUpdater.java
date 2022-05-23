@@ -28,14 +28,13 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
-public class NewNoticeUpdater {
+public class NewNoticeUpdater extends NoticeUpdater {
 
     private final Map<CategoryName, NoticeAPIClient<CommonNoticeFormatDTO, CategoryName>> noticeAPIClientMap;
     private final Map<CategoryName, DeptInfo> categoryNameDeptInfoMap;
     private final NoticeScraper scraper;
     private final DTOConverter<NewNoticeMQMessageDTO, Notice> noticeEntityToNewNoticeMQMessageDTOConverter;
     private final DTOConverter<Notice, CommonNoticeFormatDTO> commonNoticeFormatDTOToNoticeEntityConverter;
-    private final DateConverter<String, String> yyyymmddConverter;
     private final DateConverter<String, String> ymdhmsToYmdConverter;
     private final NoticeRepository noticeRepository;
     private final MQNotifierProducer<NewNoticeMQMessageDTO> mqNotifierProducer;
@@ -146,51 +145,9 @@ public class NewNoticeUpdater {
         log.info("******** {} 공지 업데이트 종료 ********", categoryName.getKorName());
     }
 
-    private void convertPostedDateToyyyyMMdd(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList, CategoryName categoryName) {
-
-        for (CommonNoticeFormatDTO notice : commonNoticeFormatDTOList) {
-            try {
-                String converted = yyyymmddConverter.convert(notice.getPostedDate());
-                notice.setPostedDate(converted);
-            } catch(Exception e) {
-                log.info("에러 발생 공지 내용");
-                log.info("아이디 = {}", notice.getArticleId());
-                log.info("게시일 = {}", notice.getPostedDate());
-                log.info("제목 = {}", notice.getSubject());
-                log.info("카테고리 = {}", categoryName.getKorName());
-            }
-        }
-    }
-
-    private List<CommonNoticeFormatDTO> filterNoticesByDate(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList, CategoryName categoryName) throws ParseException {
-        Calendar cal = Calendar.getInstance();
-        cal.setTime(new Date());
-        DateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
-
-        cal.add(Calendar.YEAR, -1);
-        cal.add(Calendar.MONTH, -6);
-
-        Date standardDate = dateFormat.parse(dateFormat.format(cal.getTime()));
-
-        return commonNoticeFormatDTOList.stream().filter((notice) -> {
-            try {
-                String postedDate = notice.getPostedDate();
-                if(CategoryName.LIBRARY.equals(categoryName)) {
-                    postedDate = ymdhmsToYmdConverter.convert(postedDate);
-                }
-
-                Date noticeDate = dateFormat.parse(postedDate);
-                return noticeDate.after(standardDate);
-            } catch (ParseException e) {
-                log.info("[{}] 잘못된 날짜 형식", categoryName.getKorName());
-                log.info("[{}] {} {}", categoryName.getKorName(), notice.getPostedDate(), notice.getSubject());
-                return false;
-            }
-        }).collect(Collectors.toList());
-    }
 
     // articleId를 이용해 새로운 공지인지 아닌지 판별한다.
-    private List<Notice> compareAndUpdateDB(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList, CategoryName categoryName) {
+    protected List<Notice> compareAndUpdateDB(List<CommonNoticeFormatDTO> commonNoticeFormatDTOList, CategoryName categoryName) {
 
         List<Notice> newNotices = new LinkedList<>();
         Category category = categoryMap.get(categoryName.getName());
